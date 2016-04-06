@@ -1,0 +1,15 @@
+{
+  "name": "pairsheap",
+  "version": "0.0.1",
+  "description": "A pairsheap implementation for node",
+  "main": "index.js",
+  "scripts": {
+    "test": "./node_modules/.bin/mocha"
+  },
+  "author": "Chris Howe <chris@howeville.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^2.4.5"
+  }
+}
