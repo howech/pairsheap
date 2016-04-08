@@ -1,38 +1,19 @@
+// This is the internal data structure for holding data,
+// prirorities and the heap structure. Nodes hold a link to their
+// parent, to the first node of a singly linked list of children.
 function heapNode(priority, data) {
     this.priority = priority
     this.data = data
     this.parent = null
     this.child = null
-    this.lsib = null
-    this.rsib = null
+    this.sib = null
 }
 
-heapNode.prototype.detach = function() {
-    if(this.parent) {
-        if(this.parent.child == this) {
-            this.parent.child = this.rsib
-        }
-        this.parent = null
-    }
-    if(this.lsib) {
-        this.lsib.rsib = this.rsib
-    }
-    if(this.rsib) {
-        this.rsib.lsib = this.lsib
-    }
-    this.lsib = null
-    this.rsib = null
-}
-
-heapNode.prototype.addChild = function(c) {
-    if(this.child) {
-        this.child.lsib = c
-    }
-    c.rsib = this.child
-    c.parent = this
-    this.child = c
-}
-
+// Merge two heap nodes into a single heap. The one with
+// the lower priority becomes the parent, and the other one
+// gets pushed to the top of the child list for the new parent.
+//
+// Note that each of the nodes being merged should not have siblings.
 var mergeHeapNodes = function(h1, h2) {
     if(h1 == null) {
         return h2
@@ -52,39 +33,68 @@ var mergeHeapNodes = function(h1, h2) {
     return h1
 }
 
-var mergePairs = function(h) {
-    // Non-recursive version to avoid huge callstacks in
-    // pessimal cases. This version ends up pairing things up in
-    // the reverse order from the simple reverse case
-    // but it should not matter a whole lot
+// This method merges children two and three, and
+// then merges the resulting node into child one. This
+// contracts the number of children by as many as two.
+heapNode.prototype.mergeTwoThree = function() {
+    var a = this.child
+    if(a) {
+        var b = a.sib
+        var c = b && b.sib
+        var d = c && c.sib
 
-    var x = null
-
-    while(h) {
-        var y = h.rsib
-        h.rsib = null
-
-        var z = y && y.rsib
-
-        if( y ) {
-            y.lsib = null
-            y.rsib = null
+        a.sib = null
+        if(b) {
+            b.sib = null
+        }
+        if(c) {
+            c.sib = null
         }
 
-        if(z) {
-            z.lsib = null
-        }
+        a = mergeHeapNodes(a,mergeHeapNodes(b,c))
+        a.sib = d
+        this.child = a
+    }
+}
 
-        y = mergeHeapNodes(h,y)
-        x = mergeHeapNodes(x,y)
-        h = z
+// This method removes a node from the overall tree structure
+// It does this by telling the nodes parent to contract its
+// children until this node become the first child of a parent
+// (in the process, this nodes parent can change). From there,
+// the removal becomes simple.
+heapNode.prototype.detach = function() {
+    if(!this.parent) {
+        return
     }
 
-    return x
+    while(this.parent.child != this) {
+        this.parent.mergeTwoThree()
+    }
+
+    this.parent.child = this.sib
+    this.parent = null
+}
+
+// Adds the child node as the first child in the list
+heapNode.prototype.addChild = function(c) {
+    c.sib = this.child
+    this.child = c
+    c.parent = this
+}
+
+// Merges children until there is only one.
+heapNode.prototype.mergeChildren = function() {
+    while(this.child && this.child.sib) {
+        this.mergeTwoThree()
+    }
 }
 
 
-
+// This is the outer structure that has all of the top
+// level methods. It holds a pointer to the root of the
+// tree structure, as well as a dictionary to help you get
+// find your way back into the tree given a key that
+// identifies your data
 function PairsHeap() {
     this.heap = null
     this.size = 0
@@ -92,6 +102,12 @@ function PairsHeap() {
 }
 
 
+// This function tries to  get the key associated with your
+// hunk of data. If your data structure has a "getKey" method,
+// it calls it, if your structure has a 'key' property, it
+// uses it, if you data is a string, it is its own key. Other
+// wise, your data has no key and you will not be able to update
+// or detete it from the queue
 function getKeyFromData(data) {
     if(data && (data.getKey)) {
         return data.getKey()
@@ -105,6 +121,7 @@ function getKeyFromData(data) {
     return null
 }
 
+//insert an item into the queue
 PairsHeap.prototype.Insert = function(priority, data) {
     var key = getKeyFromData(data)
     var node = new heapNode(priority, data)
@@ -116,6 +133,7 @@ PairsHeap.prototype.Insert = function(priority, data) {
 }
 
 
+// peek at the minimum on the queue
 PairsHeap.prototype.Peek = function() {
     if(this.heap) {
         return [this.heap.priority, this.heap.data]
@@ -124,14 +142,20 @@ PairsHeap.prototype.Peek = function() {
     }
 }
 
+// delete the minimum from the queue
 PairsHeap.prototype.DeleteMin = function() {
     if(this.heap) {
         var t = this.heap
-        this.heap = mergePairs(t.child)
+
+        t.mergeChildren()
+        this.heap = t.child
+
         if(this.heap) {
             this.heap.parent = null
         }
+
         t.child = null
+
         var key = getKeyFromData(t.data)
         if(key) {
             delete this.index[key]
@@ -140,12 +164,14 @@ PairsHeap.prototype.DeleteMin = function() {
     }
 }
 
+// deletes the minimum item and returns it
 PairsHeap.prototype.Pop = function() {
-    x = this.Peek()
+    var x = this.Peek()
     this.DeleteMin()
     return x
 }
 
+// change the priority of an item (either up or down)
 PairsHeap.prototype.UpdatePriority = function(priority, data) {
     var key = getKeyFromData(data)
     if(key) {
@@ -158,42 +184,20 @@ PairsHeap.prototype.UpdatePriority = function(priority, data) {
                     this.heap = mergeHeapNodes(this.heap, node)
                 }
             } else if (priority > node.priority) {
-                if( node.child ) {
-                    node.priority = priority
-
-                    var ch = mergePairs(node.child)
-                    var parent = node.parent
-                    var lsib = node.lsib
-                    var rsib = node.rsib
-
-                    node.child = null
-                    node.parent = null
-                    node.lsib = null
-                    node.rsib = null
-
-                    ch = mergeHeapNodes(ch, node)
-
-                    ch.parent = parent
-                    ch.lsib = lsib
-                    ch.rsib = rsib
-
-                    if( parent && !ch.lsib) {
-                        parent.child = ch
-                    }
-
-                    if(!parent) {
-                        this.heap = ch
-                    }
-
-                    if(ch.lsib) {
-                        ch.lsib.rsib = ch
-                    }
-                    if(ch.rsib) {
-                        ch.rsib.lsib = ch
-                    }
-                } else {
-                    node.priority = priority
+                node.detach()
+                node.mergeChildren()
+                node.priority = priority
+                var ch = node.child
+                if(ch) {
+                    ch.parent = null
                 }
+                node.child = null
+                ch = mergeHeapNodes(ch,node)
+               if(node != this.heap) {
+                   this.heap = mergeHeapNodes(this.heap,ch)
+               } else {
+                   this.heap = ch
+               }
             }
             return true
         }
@@ -201,14 +205,17 @@ PairsHeap.prototype.UpdatePriority = function(priority, data) {
     return false
 }
 
+// Delete an item
 PairsHeap.prototype.Delete = function(data) {
     var key = getKeyFromData(data)
     var node = this.index[key]
     if(node) {
         delete this.index[key]
         node.detach()
+        node.mergeChildren()
 
-        var ch = mergePairs(node.child)
+        var ch = node.child
+
         if(this.heap == node) {
             this.heap = ch
         } else {
@@ -223,6 +230,7 @@ PairsHeap.prototype.Delete = function(data) {
     return false
 }
 
+// get an item by its key
 PairsHeap.prototype.GetItem = function(data) {
     var key = getKeyFromData(data)
     if(key) {
